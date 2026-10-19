@@ -1,0 +1,25 @@
+# Target build directories
+target/
+build/
+out/
+bin/
+.gradle/
+
+# IDE files
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# Compiled classes and archives
+*.class
+*.jar
+*.war
+*.ear
+
+# Logs and system files
+*.log
+.DS_Store
+Thumbs.db
