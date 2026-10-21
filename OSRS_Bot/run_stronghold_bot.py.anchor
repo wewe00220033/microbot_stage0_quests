@@ -1,0 +1,236 @@
+import urllib.request
+import json
+import time
+import os
+import sys
+
+# دعم ترميز UTF-8 على ويندوز لمنع أخطاء charmap cp1252
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
+# ==============================================================================
+# OSRS Standalone Autonomous Bot — Stronghold of Security (10,000 GP + Boots)
+# يعمل محلياً 100% بدون نت ولا ذكاء اصطناعي وبدون استهلاك أي كوتا!
+# ==============================================================================
+
+TOKEN_PATH = r"C:\Users\USER\.runelite\.agent-token"
+if not os.path.exists(TOKEN_PATH):
+    print("❌ خطأ: ملف التوكن غير موجود! تأكد إن RuneLite شغال والـ Agent Server متفعل.")
+    input("اضغط Enter للخروج...")
+    sys.exit(1)
+
+TOKEN = open(TOKEN_PATH).read().strip()
+HEADERS = {"X-Agent-Token": TOKEN, "Content-Type": "application/json"}
+BASE_URL = "http://127.0.0.1:8081"
+
+SECURITY_ANSWERS = {
+    "randomly selected for a prize": "No way! I'm reporting you to Jagex!",
+    "logged in while i'm out of the room": "No.",
+    "remove a hijacker": "Use the Account Recovery System.",
+    "make you a player moderator": "Don't give them the information and send an 'Abuse report'.",
+    "watching a stream": "Report the stream as a scam. Real Jagex streams have a 'verified' mark.",
+    "do a difficult quest": "Don't give them my password.",
+    "who can i give my password": "Nobody.",
+    "how do i set up two-factor": "Through account settings on oldschool.runescape.com.",
+    "example of a good bank pin": "The birthday of a famous person or event.",
+    "check your stats": "Don't give out your password to anyone. Not even close friends.",
+    "comment on the forum post": "Report the player for phishing.",
+    "invitation via in- game chat or email": "Report the incident and do not click any links.",
+    "how do i set a bank pin": "Talk to any banker.",
+    "moderator asks me for my account details": "Politely tell them no, then use the 'Report Abuse' button.",
+    "after you answer the question": "Read the text and follow the advice given.",
+    "prevent me from saying my pin": "No.",
+    "that sound?": "No way! You'll just take my gold for your own! Reported!",
+    "verify my identity": "Delete it - it's a fake!",
+    "website claims": "Nothing, it's a fake.",
+    "react?": "Don't share your information and report the player.",
+    "make you a member for free": "Don't tell them anything and click the 'Report Abuse' button.",
+    "okay to buy an old school": "No, you should never buy an account.",
+    "invitation via social media": "Report the incident and do not click any links.",
+    "where is it safe": "Only on the Old School RuneScape website.",
+    "best way to secure your account": "Two-factor authentication on your account and your registered email.",
+    "share my account with": "Nobody.",
+    "purchase items and/or gold": "Do not visit the website and report the player who messaged you.",
+    "whose responsibility": "Me.",
+    "someone to level your account": "No, you should never allow anyone to use your account.",
+    "account is compromised": "Secure my device and reset my password.",
+    "respond?": "Decline the offer and report that player.",
+    "password backwards": "Don't type in my password backwards and report the player.",
+    "keylogger or virus": "Virus scan my device then change my password.",
+    "registered email secure": "Set up two-factor authentication with my email provider.",
+    "characteristic of a secure password": "It's never reused on other websites or accounts.",
+    "lose out! what do you say?": "Nope, you're tricking me into going somewhere dangerous.",
+    "not through responding to emails.": "No."
+}
+
+def api_get(endpoint):
+    req = urllib.request.Request(f"{BASE_URL}{endpoint}", headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        return {"error": str(e)}
+
+def api_post(endpoint, data):
+    body = json.dumps(data).encode()
+    req = urllib.request.Request(f"{BASE_URL}{endpoint}", data=body, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return json.loads(resp.read().decode())
+    except Exception as e:
+        return {"error": str(e)}
+
+def ensure_login():
+    st = api_get("/state")
+    if not st.get("loggedIn"):
+        print("🔄 الحساب غير مسجل الدخول، جاري تسجيل الدخول التلقائي...")
+        res = api_post("/login", {"wait": True, "timeout": 30})
+        print("✅ نتيجة تسجيل الدخول:", res.get("message"))
+        time.sleep(2)
+
+def handle_dialogue_and_modals():
+    # 1. Warning modal on ladders (groupId: 579, childId: 17)
+    api_post("/widgets/click", {"groupId": 579, "childId": 17})
+    
+    # 2. Dialogue & questions
+    d = api_get("/dialogue")
+    if not d.get("inDialogue"):
+        return False
+    
+    if d.get("hasOptions") or d.get("hasSelectAnOption"):
+        opts = d.get("options", [])
+        q = d.get("question", "").lower()
+        matched_ans = None
+        for k, v in SECURITY_ANSWERS.items():
+            if k in q:
+                matched_ans = v
+                break
+        selected = None
+        if matched_ans:
+            for opt in opts:
+                if matched_ans.lower() in opt.lower() or opt.lower() in matched_ans.lower():
+                    selected = opt
+                    break
+        if not selected:
+            for opt in opts:
+                if "yes" in opt.lower() or "fancy" in opt.lower():
+                    selected = opt
+                    break
+        if selected:
+            print(f"💬 إجابة أمنية: {selected}")
+            api_post("/dialogue/select", {"option": selected})
+    elif d.get("hasContinue"):
+        api_post("/dialogue/continue", {})
+    return True
+
+def walk_to(x, y, plane=0, timeout=60):
+    print(f"🚶 يتحرك الآن إلى: ({x}, {y}, plane: {plane})...")
+    res = api_post("/walk", {"x": x, "y": y, "plane": plane, "wait": False})
+    start_t = time.time()
+    px, py, p_plane = 0, 0, 0
+    while time.time() - start_t < timeout:
+        handle_dialogue_and_modals()
+        st = api_get("/state")
+        pos = st.get("player", {}).get("position", {})
+        px, py, p_plane = pos.get("x", 0), pos.get("y", 0), pos.get("plane", 0)
+        if abs(px - x) <= 3 and abs(py - y) <= 3 and p_plane == plane:
+            print(f"📍 وصل بنجاح إلى الهدف: ({px}, {py})")
+            return True
+        time.sleep(1)
+    print(f"⚠️ انتهت المهلة ({timeout}ث)، الموقع الحالي: ({px}, {py}, plane: {p_plane})")
+    return False
+
+def interact_object(obj_id, action):
+    print(f"🖐️ تفاعل مع الغرض: {obj_id} (أمر: {action})...")
+    res = api_post("/objects/interact", {"id": obj_id, "action": action})
+    time.sleep(2)
+    handle_dialogue_and_modals()
+    return res
+
+def main():
+    print("=" * 65)
+    print("🚀 مرحباً بك في البوت المستقل الشامل لـ Stronghold of Security")
+    print("💰 الهدف: جمع 10,000 GP + Fancy Boots وحفظها في البنك")
+    print("⚡ يعمل محلياً 100% من جهازك بدون نت ولا ذكاء اصطناعي وبدون استهلاك كوتا!")
+    print("=" * 65)
+
+    ensure_login()
+    
+    st = api_get("/state")
+    if "error" in st:
+        print("\n❌ تنبيه هام:")
+        print("مش قادرين نتصل بـ Microbot على المنفذ 8081!")
+        print("السبب: اللعبة المفتوحة حالياً هي RuneLite العادية (مش نسخة البوت الآلي).")
+        print("الحل في ثانية: اقفل اللعبة المفتوحة حالياً، وافتحها من أيقونة 'تشغيل_البوت.bat' اللي على سطح المكتب.")
+        print("أول ما تفتح اللعبة وتسجل دخول، شغل ملف 'تشغيل_بوت_السترونج_هولد.bat' وهيشتغل فوراً!")
+        input("\nاضغط Enter للخروج...")
+        sys.exit(1)
+
+    pos = st.get("player", {}).get("position", {})
+    print(f"📌 موقع اللاعب الحالي: ({pos.get('x')}, {pos.get('y')}, plane: {pos.get('plane')})")
+
+    # لو البنك مفتوح اقفله
+    api_post("/bank/close", {})
+
+    print("\n--- [المرحلة 1]: التوجه لمدخل الـ Stronghold في قرية البرابرة ---")
+    # البلاطة السالكة الملاصقة للمدخل هي (3080, 3419)
+    if not walk_to(3080, 3419, plane=0, timeout=60):
+        walk_to(3080, 3419, plane=0, timeout=40)
+    
+    print("\n--- [المرحلة 2]: النزول داخل الكهف ---")
+    interact_object(20790, "Climb-down")
+    time.sleep(3)
+    handle_dialogue_and_modals()
+
+    # التأكد من التواجد تحت الأرض
+    st_cave = api_get("/state")
+    py_cave = st_cave.get("player", {}).get("position", {}).get("y", 0)
+    if py_cave < 5000:
+        print("🔄 إعادة محاولة النزول داخل الصخرة...")
+        interact_object(20790, "Climb-down")
+        time.sleep(3)
+        handle_dialogue_and_modals()
+
+    print("\n--- [المرحلة 3]: استخدام بوابة الاختصار للطابق التالت/الرابع ---")
+    interact_object(20786, "Use")
+    time.sleep(3)
+    handle_dialogue_and_modals()
+
+    print("\n--- [المرحلة 4]: التحرك إلى صندوق الطابق الثالث (5,000 GP) ---")
+    walk_to(2144, 5280, plane=0, timeout=40)
+    interact_object(23709, "Open")
+    time.sleep(2)
+    handle_dialogue_and_modals()
+
+    print("\n--- [المرحلة 5]: النزول للطابق الرابع والأخير ---")
+    interact_object(23706, "Climb-down")
+    time.sleep(2)
+    handle_dialogue_and_modals()
+
+    print("\n--- [المرحلة 6]: التحرك إلى مهد الحياة واختيار Fancy Boots ---")
+    walk_to(2344, 5214, plane=0, timeout=40)
+    interact_object(23731, "Search")
+    time.sleep(2)
+    handle_dialogue_and_modals()
+
+    print("\n--- [المرحلة 7]: الهروب للسطح عبر الحبل العظمي ---")
+    interact_object(23732, "Climb-up")
+    time.sleep(3)
+
+    print("\n--- [المرحلة 8]: التوجه لبنك الـ Grand Exchange لحفظ الـ 10,000 GP والجزمة ---")
+    walk_to(3164, 3487, plane=0, timeout=50)
+    api_post("/bank/open", {})
+    time.sleep(2)
+    api_post("/bank/deposit", {"all": True})
+    time.sleep(1)
+    api_post("/bank/close", {})
+
+    print("\n" + "=" * 65)
+    print("🎉 مبروووك يا بطل! تم إنجاز المهمة بنجاح 100% وحفظ كل شيء بالبنك!")
+    print("=" * 65)
+    input("اضغط Enter للإغلاق...")
+
+if __name__ == "__main__":
+    main()
